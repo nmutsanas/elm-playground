@@ -6,7 +6,7 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Http
-import Json.Decode exposing (Decoder, field, list, string)
+import Json.Decode exposing (Decoder, field, list, string, map3)
 
 
 
@@ -33,6 +33,13 @@ type alias Config =
     }
 
 
+type alias Gif =
+    { id : String
+    , title : String
+    , embed_url : String
+    }
+
+
 type Model
     = Failure
     | Loading
@@ -50,7 +57,7 @@ init _ =
 
 type Msg
     = MorePlease
-    | GotGifs (Result Http.Error (List String))
+    | GotGifs (Result Http.Error (List Gif))
     | Filter String
 
 
@@ -65,9 +72,10 @@ update msg model =
                 Success config ->
                     let
                         newConfig =
-                            { config 
-                            | searchTerm = searchTerm
-                            , visibleUrls = (getVisibleUrls config.urls searchTerm)}
+                            { config
+                                | searchTerm = searchTerm
+                                , visibleUrls = getVisibleUrls config.urls searchTerm
+                            }
                     in
                     ( Success newConfig, Cmd.none )
 
@@ -76,8 +84,9 @@ update msg model =
 
         GotGifs result ->
             case result of
-                Ok urls ->
+                Ok gifs ->
                     let
+                        urls = List.map (\ g -> g.title) gifs
                         config =
                             Config urls urls ""
                     in
@@ -139,16 +148,18 @@ viewInput t p toMsg =
 
 
 viewKeyedEntry : String -> ( String, Html Msg )
-viewKeyedEntry gif =
-    ( gif
+viewKeyedEntry url =
+    ( url
     , li []
-        [ text gif
+        [ text url
         ]
     )
 
-getVisibleUrls : (List String) -> String -> (List String)
+
+getVisibleUrls : List String -> String -> List String
 getVisibleUrls allUrls searchTerm =
-    List.filter (\ url -> (String.contains searchTerm url)) allUrls
+    List.filter (\url -> String.contains searchTerm url) allUrls
+
 
 
 -- HTTP
@@ -162,6 +173,13 @@ getRandomCatGif =
         }
 
 
-gifsDecoder : Decoder (List String)
+gifsDecoder : Decoder (List Gif)
 gifsDecoder =
-    field "data" (list (field "title" string))
+    field "data"
+        (list
+            (map3 Gif
+                (field "id" string)
+                (field "title" string)
+                (field "embed_url" string)
+            )
+        )
