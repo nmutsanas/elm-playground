@@ -26,10 +26,17 @@ main =
 -- MODEL
 
 
+type alias Config =
+    { urls : List String
+    , visibleUrls : List String
+    , searchTerm : String
+    }
+
+
 type Model
     = Failure
     | Loading
-    | Success (List String)
+    | Success Config
 
 
 init : () -> ( Model, Cmd Msg )
@@ -54,12 +61,27 @@ update msg model =
             ( Loading, getRandomCatGif )
 
         Filter searchTerm ->
-            ( Loading, getRandomCatGif )
+            case model of
+                Success config ->
+                    let
+                        newConfig =
+                            { config 
+                            | searchTerm = searchTerm
+                            , visibleUrls = (getVisibleUrls config.urls searchTerm)}
+                    in
+                    ( Success newConfig, Cmd.none )
+
+                _ ->
+                    ( Loading, getRandomCatGif )
 
         GotGifs result ->
             case result of
                 Ok urls ->
-                    ( Success urls, Cmd.none )
+                    let
+                        config =
+                            Config urls urls ""
+                    in
+                    ( Success config, Cmd.none )
 
                 Err _ ->
                     ( Failure, Cmd.none )
@@ -98,15 +120,16 @@ viewGif model =
         Loading ->
             text "Loading..."
 
-        Success urls ->
+        Success config ->
             div []
                 [ div []
                     [ viewInput "text" "Search..." Filter
                     ]
                 , button [ onClick MorePlease, style "display" "block" ] [ text "more please" ]
-                , div [] [ text (String.concat [ String.fromInt (List.length urls), " gifs found" ]) ]
+                , div [] [ text (String.concat [ String.fromInt (List.length config.visibleUrls), " gifs found" ]) ]
+                , div [] [ text (String.concat [ "Searching for : ", config.searchTerm ]) ]
                 , Keyed.ul [ class "gif-entry" ] <|
-                    List.map viewKeyedEntry urls
+                    List.map viewKeyedEntry config.visibleUrls
                 ]
 
 
@@ -123,6 +146,9 @@ viewKeyedEntry gif =
         ]
     )
 
+getVisibleUrls : (List String) -> String -> (List String)
+getVisibleUrls allUrls searchTerm =
+    List.filter (\ url -> (String.contains searchTerm url)) allUrls
 
 
 -- HTTP
