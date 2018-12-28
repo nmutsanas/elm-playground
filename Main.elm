@@ -6,7 +6,7 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Http
-import Json.Decode exposing (Decoder, field, list, string, map3)
+import Json.Decode exposing (Decoder, field, list, map3, string)
 
 
 
@@ -27,8 +27,8 @@ main =
 
 
 type alias Config =
-    { urls : List String
-    , visibleUrls : List String
+    { gifs : List Gif
+    , visibleGifs : List Gif
     , searchTerm : String
     }
 
@@ -74,7 +74,7 @@ update msg model =
                         newConfig =
                             { config
                                 | searchTerm = searchTerm
-                                , visibleUrls = getVisibleUrls config.urls searchTerm
+                                , visibleGifs = getVisibleGifs config.gifs searchTerm
                             }
                     in
                     ( Success newConfig, Cmd.none )
@@ -86,9 +86,8 @@ update msg model =
             case result of
                 Ok gifs ->
                     let
-                        urls = List.map (\ g -> g.title) gifs
                         config =
-                            Config urls urls ""
+                            Config gifs gifs ""
                     in
                     ( Success config, Cmd.none )
 
@@ -135,10 +134,10 @@ viewGif model =
                     [ viewInput "text" "Search..." Filter
                     ]
                 , button [ onClick MorePlease, style "display" "block" ] [ text "more please" ]
-                , div [] [ text (String.concat [ String.fromInt (List.length config.visibleUrls), " gifs found" ]) ]
+                , div [] [ text (String.concat [ String.fromInt (List.length config.visibleGifs), " gifs found" ]) ]
                 , div [] [ text (String.concat [ "Searching for : ", config.searchTerm ]) ]
                 , Keyed.ul [ class "gif-entry" ] <|
-                    List.map viewKeyedEntry config.visibleUrls
+                    List.map viewKeyedEntry config.visibleGifs
                 ]
 
 
@@ -147,18 +146,18 @@ viewInput t p toMsg =
     input [ type_ t, placeholder p, onInput toMsg ] []
 
 
-viewKeyedEntry : String -> ( String, Html Msg )
-viewKeyedEntry url =
-    ( url
+viewKeyedEntry : Gif -> ( String, Html Msg )
+viewKeyedEntry gif =
+    ( gif.id
     , li []
-        [ text url
+        [ text gif.title
         ]
     )
 
 
-getVisibleUrls : List String -> String -> List String
-getVisibleUrls allUrls searchTerm =
-    List.filter (\url -> String.contains searchTerm url) allUrls
+getVisibleGifs : List Gif -> String -> List Gif
+getVisibleGifs allGifs searchTerm =
+    List.filter (\gif -> String.contains searchTerm gif.title) allGifs
 
 
 
