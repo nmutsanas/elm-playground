@@ -30,6 +30,7 @@ type alias Config =
     { gifs : List Gif
     , visibleGifs : List Gif
     , searchTerm : String
+    , selectedGif : Maybe Gif
     }
 
 
@@ -59,6 +60,7 @@ type Msg
     = MorePlease
     | GotGifs (Result Http.Error (List Gif))
     | Filter String
+    | SelectedGif Gif
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -82,12 +84,24 @@ update msg model =
                 _ ->
                     ( Loading, getRandomCatGif )
 
+        SelectedGif gif ->
+            case model of
+                Success config ->
+                    let
+                        newConfig =
+                            { config | selectedGif = Just gif }
+                    in
+                    ( Success newConfig, Cmd.none )
+
+                _ ->
+                    ( Loading, getRandomCatGif )
+
         GotGifs result ->
             case result of
                 Ok gifs ->
                     let
                         config =
-                            Config gifs gifs ""
+                            Config gifs gifs "" Nothing
                     in
                     ( Success config, Cmd.none )
 
@@ -112,8 +126,27 @@ view : Model -> Html Msg
 view model =
     div []
         [ h2 [] [ text "Trending Gifs" ]
-        , viewGif model
+        , div [] [ viewGif model ]
+        , div [] [ viewSelectedGif model ]
         ]
+
+
+viewSelectedGif : Model -> Html Msg
+viewSelectedGif model =
+    case model of
+        Success config ->
+            case config.selectedGif of
+                Nothing ->
+                    div [] [ text "nothing selected" ]
+
+                Just gif ->
+                    div []
+                        [ h3 [] [ text (gif.id ++ " selected") ]
+                        , img [ src gif.embed_url ] []
+                        ]
+
+        _ ->
+            div [] [ text "please select a gif" ]
 
 
 viewGif : Model -> Html Msg
@@ -150,7 +183,7 @@ viewKeyedEntry : Gif -> ( String, Html Msg )
 viewKeyedEntry gif =
     ( gif.id
     , li []
-        [ text gif.title
+        [ a [ href "#", onClick (SelectedGif gif) ] [ text gif.title ]
         ]
     )
 
