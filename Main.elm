@@ -1,4 +1,4 @@
-module Main exposing (Model(..), Msg(..), getRandomCatGif, gifsDecoder, init, main, subscriptions, update, view, viewGif, viewKeyedEntry)
+module Main exposing (Model(..), Msg(..), getGifsByTag, gifsDecoder, init, main, subscriptions, update, view, viewGif, viewKeyedEntry)
 
 import Browser
 import Debounce exposing (Debounce)
@@ -31,6 +31,7 @@ main =
 type alias Config =
     { gifs : List Gif
     , visibleGifs : List Gif
+    , tag : String
     , searchTerm : String
     , debounce : Debounce String
     , selectedGif : Maybe Gif
@@ -52,7 +53,7 @@ type Model
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( Loading, getRandomCatGif )
+    ( Loading, getGifsByTag "cat" )
 
 
 
@@ -60,7 +61,8 @@ init _ =
 
 
 type Msg
-    = MorePlease
+    = LoadCats
+    | MorePlease String
     | GotGifs (Result Http.Error (List Gif))
     | OnInput String
     | DebounceMsg Debounce.Msg
@@ -71,8 +73,11 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        MorePlease ->
-            ( Loading, getRandomCatGif )
+        LoadCats ->
+            ( Loading, getGifsByTag "cat" )
+
+        MorePlease tag ->
+            ( Loading, getGifsByTag tag )
 
         OnInput s ->
             case model of
@@ -82,14 +87,13 @@ update msg model =
                         ( debounce, cmd ) =
                             Debounce.push debounceConfig s config.debounce
 
-                        -- Can I already reference the debounce in the "let" branch? TODO
                         newConfig =
-                            { config | searchTerm = s, debounce = debounce }
+                            { config | tag = s, debounce = debounce }
                     in
                     ( Success newConfig, cmd )
 
                 _ ->
-                    ( Loading, getRandomCatGif )
+                    ( Loading, getGifsByTag "cat" )
 
         DebounceMsg msg_ ->
             case model of
@@ -108,7 +112,7 @@ update msg model =
                     ( Success newConfig, cmd )
 
                 _ ->
-                    ( Loading, getRandomCatGif )        
+                    ( Loading, getGifsByTag "cat" )
 
         Filter searchTerm ->
             case model of
@@ -123,7 +127,7 @@ update msg model =
                     ( Success newConfig, Cmd.none )
 
                 _ ->
-                    ( Loading, getRandomCatGif )
+                    ( Loading, getGifsByTag "cat" )
 
         SelectedGif gif ->
             case model of
@@ -135,14 +139,14 @@ update msg model =
                     ( Success newConfig, Cmd.none )
 
                 _ ->
-                    ( Loading, getRandomCatGif )
+                    ( Loading, getGifsByTag "cat" )
 
         GotGifs result ->
             case result of
                 Ok gifs ->
                     let
                         config =
-                            Config gifs gifs "" Debounce.init Nothing
+                            Config gifs gifs "" "" Debounce.init Nothing
                     in
                     ( Success config, Cmd.none )
 
@@ -152,14 +156,14 @@ update msg model =
 
 debounceConfig : Debounce.Config Msg
 debounceConfig =
-    { strategy = Debounce.later 1000
+    { strategy = Debounce.later 600
     , transform = DebounceMsg
     }
 
 
 save : String -> Cmd Msg
 save s =
-    Task.perform Filter (Task.succeed s)
+    Task.perform MorePlease (Task.succeed s)
 
 
 
@@ -207,8 +211,8 @@ viewGif model =
     case model of
         Failure ->
             div []
-                [ text "I could not load a random cat for some reason. "
-                , button [ onClick MorePlease ] [ text "Try Again!" ]
+                [ text "I could not load the gifs for some reason. "
+                , button [ onClick LoadCats ] [ text "Try Again!" ]
                 ]
 
         Loading ->
@@ -217,9 +221,11 @@ viewGif model =
         Success config ->
             div []
                 [ div []
-                    [ viewInput "text" "Search..." OnInput
+                    [ viewInput "text" "Fetch by tag..." OnInput
+                    , viewInput "text" "Filter..." Filter
                     ]
-                , button [ onClick MorePlease, style "display" "block" ] [ text "more please" ]
+
+                -- , button [ onClick MorePlease, style "display" "block" ] [ text "more please" ]
                 , div [] [ text (String.concat [ String.fromInt (List.length config.visibleGifs), " gifs found" ]) ]
                 , div [] [ text (String.concat [ "Searching for : ", config.searchTerm ]) ]
                 , Keyed.ul [ class "gif-entry" ] <|
@@ -250,10 +256,10 @@ getVisibleGifs allGifs searchTerm =
 -- HTTP
 
 
-getRandomCatGif : Cmd Msg
-getRandomCatGif =
+getGifsByTag : String -> Cmd Msg
+getGifsByTag tag =
     Http.get
-        { url = "https://api.giphy.com/v1/gifs/trending?api_key=dc6zaTOxFJmzC&tag=cat"
+        { url = "https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=" ++ tag
         , expect = Http.expectJson GotGifs gifsDecoder
         }
 
