@@ -1,12 +1,14 @@
 module Main exposing (Model(..), Msg(..), getRandomCatGif, gifsDecoder, init, main, subscriptions, update, view, viewGif, viewKeyedEntry)
 
 import Browser
+import Debounce exposing (Debounce)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Http
 import Json.Decode exposing (Decoder, field, list, map3, string)
+import Task exposing (..)
 
 
 
@@ -30,6 +32,7 @@ type alias Config =
     { gifs : List Gif
     , visibleGifs : List Gif
     , searchTerm : String
+    , debounce : Debounce String
     , selectedGif : Maybe Gif
     }
 
@@ -59,6 +62,8 @@ init _ =
 type Msg
     = MorePlease
     | GotGifs (Result Http.Error (List Gif))
+    | OnInput String
+    | DebounceMsg Debounce.Msg
     | Filter String
     | SelectedGif Gif
 
@@ -68,6 +73,42 @@ update msg model =
     case msg of
         MorePlease ->
             ( Loading, getRandomCatGif )
+
+        OnInput s ->
+            case model of
+                Success config ->
+                    let
+                        -- Push your values here.
+                        ( debounce, cmd ) =
+                            Debounce.push debounceConfig s config.debounce
+
+                        -- Can I already reference the debounce in the "let" branch? TODO
+                        newConfig =
+                            { config | searchTerm = s, debounce = debounce }
+                    in
+                    ( Success newConfig, cmd )
+
+                _ ->
+                    ( Loading, getRandomCatGif )
+
+        DebounceMsg msg_ ->
+            case model of
+                Success config ->
+                    let
+                        ( debounce, cmd ) =
+                            Debounce.update
+                                debounceConfig
+                                (Debounce.takeLast save)
+                                msg_
+                                config.debounce
+
+                        newConfig =
+                            { config | debounce = debounce }
+                    in
+                    ( Success newConfig, cmd )
+
+                _ ->
+                    ( Loading, getRandomCatGif )        
 
         Filter searchTerm ->
             case model of
@@ -101,12 +142,24 @@ update msg model =
                 Ok gifs ->
                     let
                         config =
-                            Config gifs gifs "" Nothing
+                            Config gifs gifs "" Debounce.init Nothing
                     in
                     ( Success config, Cmd.none )
 
                 Err _ ->
                     ( Failure, Cmd.none )
+
+
+debounceConfig : Debounce.Config Msg
+debounceConfig =
+    { strategy = Debounce.later 1000
+    , transform = DebounceMsg
+    }
+
+
+save : String -> Cmd Msg
+save s =
+    Task.perform Filter (Task.succeed s)
 
 
 
@@ -164,7 +217,7 @@ viewGif model =
         Success config ->
             div []
                 [ div []
-                    [ viewInput "text" "Search..." Filter
+                    [ viewInput "text" "Search..." OnInput
                     ]
                 , button [ onClick MorePlease, style "display" "block" ] [ text "more please" ]
                 , div [] [ text (String.concat [ String.fromInt (List.length config.visibleGifs), " gifs found" ]) ]
@@ -209,7 +262,7 @@ gifsDecoder : Decoder (List Gif)
 gifsDecoder =
     field "data"
         (list
-            (map3 Gif
+            (Json.Decode.map3 Gif
                 (field "id" string)
                 (field "title" string)
                 (field "embed_url" string)
